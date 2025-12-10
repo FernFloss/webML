@@ -1,13 +1,14 @@
 import json
-import pika
 import os
 from datetime import datetime, timedelta
+
+import pika
 
 RABBITMQ_URL = os.getenv(
     "RABBITMQ_URL",
     "amqp://rabbitmq_user:rabbitmq_pass@localhost:5672/"
 )
-INPUT_QUEUE = os.getenv("RABBITMQ_INPUT_QUEUE", "frames_ml_in")
+INPUT_QUEUE = os.getenv("RABBITMQ_INPUT_QUEUE", "rabbit_queue")
 
 
 def main():
@@ -19,47 +20,26 @@ def main():
 
     cameras = [
         {
-            "city": "Москва",
-            "building": "ул. Ленина, д. 1",
-            "auditorium_id": 1, 
-            "auditorium_number": "101",
+            "id_camera": "AA:BB:CC:DD:EE:01",
+            "minio_bucket": "frames/AA:BB:CC:DD:EE:01/2025-02-01/frames",
             "minio_object": "frame_000186.jpg",
         },
         {
-            "city": "Питер",
-            "building": "ул. Ритина, д. 2",
-            "auditorium_id": 2, 
-            "auditorium_number": "102",
-            "minio_object": "frame_001721.jpg", 
-        },
-        {
-            "city": "Новосиб",
-            "building": "ул. Настина, д. 3",
-            "auditorium_id": 3, 
-            "auditorium_number": "103",
-            "minio_object": "frame_002685.jpg",
-        },
-        {
-            "city": "Якутск",
-            "building": "ул. Миленина, д. 4",
-            "auditorium_id": 4, 
-            "auditorium_number": "104",
-            "minio_object": "frame_002679.jpg",
+            "id_camera": "AA:BB:CC:DD:EE:02",
+            "minio_bucket": "frames/AA:BB:CC:DD:EE:02/2025-02-01/frames",
+            "minio_object": "frame_001721.jpg",
         },
     ]
 
-    base_time = datetime(2025, 11, 30, 12, 0, 0)
+    base_time = datetime(2025, 2, 1, 12, 0, 0)
 
-    for i, cam in enumerate(cameras, start=1):
+    for i, cam in enumerate(cameras, start=0):
         ts = (base_time + timedelta(minutes=i)).isoformat() + "Z"
 
         msg = {
-            "city": cam["city"],
-            "building": cam["building"],
-            "auditorium_id": cam["auditorium_id"],
-            "auditorium_number": cam["auditorium_number"],
+            "id_camera": cam["id_camera"],
             "timestamp": ts,
-            "minio_bucket": "frames",
+            "minio_bucket": cam["minio_bucket"],
             "minio_object": cam["minio_object"],
         }
 
@@ -70,11 +50,11 @@ def main():
             routing_key=INPUT_QUEUE,
             body=body,
             properties=pika.BasicProperties(
-                delivery_mode=2 
+                delivery_mode=2  # persistent
             ),
         )
 
-        print(f"sent test message for camera {cam['auditorium_number']}: {msg}")
+        print(f"sent test message for camera {cam['id_camera']}: {msg}")
 
     connection.close()
 

@@ -1,9 +1,11 @@
-numpy>=1.23.0
-opencv-python>=4.8.0.76
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
 
+numpy>=1.26.0
+opencv-python-headless>=4.8.0
+torch==2.7.1+cpu
 ultralytics>=8.3.0
-torch>=2.1.0
-torchvision>=0.16.0
 
 pika
 minio
+python-dotenv

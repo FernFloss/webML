@@ -3,7 +3,7 @@ import os
 class Config:
 
     RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
-    RABBITMQ_INPUT_QUEUE = os.getenv("RABBITMQ_INPUT_QUEUE", "frames_ml_in")
+    RABBITMQ_INPUT_QUEUE = os.getenv("RABBITMQ_INPUT_QUEUE", "rabbit_queue")
     RABBITMQ_OUTPUT_QUEUE = os.getenv("RABBITMQ_OUTPUT_QUEUE", "camera_events")
 
     MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")

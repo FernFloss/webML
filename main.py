@@ -1,9 +1,15 @@
 import json
 import logging
 import time
+
+from dotenv import load_dotenv
+
+# Load environment before reading Config so .env values are applied
+load_dotenv()
+
 import pika
 from config import Config
-from minio_client import get_frame_bytes
+from minio_client import delete_frame, get_frame_bytes
 from detector import count_people_on_frame
 
 logging.basicConfig(
@@ -18,24 +24,36 @@ def process_message(ch, method, properties, body: bytes):
         msg = json.loads(body.decode("utf-8"))
         logging.info(f"received message: {msg}")
 
-        city = msg["city"]
-        building = msg["building"]
-        auditorium_id = msg["auditorium_id"]
-        auditorium_number = msg["auditorium_number"]
+        camera_id = msg["id_camera"]
         timestamp = msg["timestamp"]
-        bucket = msg.get("minio_bucket") or Config.MINIO_DEFAULT_BUCKET
-        obj = msg["minio_object"]
+        bucket_raw = msg.get("minio_bucket") or Config.MINIO_DEFAULT_BUCKET
+        obj_raw = msg["minio_object"]
+
+        # If minio_bucket is a path (has '/' or ':'), treat it as prefix and keep objects in the default bucket.
+        # Otherwise use bucket_raw as is and obj_raw as the key.
+        if "/" in bucket_raw or ":" in bucket_raw:
+            obj = f"{bucket_raw.strip('/')}/{obj_raw.lstrip('/')}"
+            bucket = Config.MINIO_DEFAULT_BUCKET
+            logging.warning(
+                "minio_bucket '%s' is a path; using bucket '%s' and object '%s'",
+                bucket_raw,
+                bucket,
+                obj,
+            )
+        else:
+            bucket = bucket_raw
+            obj = obj_raw
 
         image_bytes = get_frame_bytes(bucket, obj)
 
         people_count = count_people_on_frame(image_bytes)
-        logging.info(f"Processed frame {bucket}/{obj} -> people_count={people_count}")
+        logging.info(
+            f"Processed frame bucket={bucket} object={obj} "
+            f"camera_id={camera_id} -> people_count={people_count}"
+        )
 
         camera_event = {
-            "auditorium_id": auditorium_id, 
-            "city": city,
-            "building": building,
-            "auditorium_number": auditorium_number,
+            "id_camera": camera_id,
             "timestamp": timestamp,
             "person_count": people_count,
         }
@@ -44,14 +62,24 @@ def process_message(ch, method, properties, body: bytes):
             exchange="",
             routing_key=Config.RABBITMQ_OUTPUT_QUEUE,
             body=json.dumps(camera_event).encode("utf-8"),
+            properties=pika.BasicProperties(delivery_mode=2),  # persistent
         )
+        logging.info(
+            "published camera_event to '%s': %s",
+            Config.RABBITMQ_OUTPUT_QUEUE,
+            camera_event,
+        )
+
+        # Delete processed frame to save storage
+        delete_frame(bucket, obj)
 
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     except Exception as e:
         logging.exception(f"Error processing message: {e}")
 
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        # Requeue message so it isn't lost (Kafka-like semantics: only drop on success)
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 
 def main():

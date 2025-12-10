@@ -17,3 +17,8 @@ def get_frame_bytes(bucket: str, obj: str) -> bytes:
         response.close()
         response.release_conn()
     return data
+
+
+def delete_frame(bucket: str, obj: str) -> None:
+    # Remove object after successful processing to save storage
+    minio_client.remove_object(bucket, obj)
